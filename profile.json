@@ -1,0 +1,38 @@
+{
+  "name": "Valdeir Júnior",
+  "github_username": null,
+  "role": "[YOUR_ROLE]",
+  "headline": "[ONE_SENTENCE_ABOUT_YOUR_TECHNICAL_FOCUS]",
+  "motto": "[SHORT_LINE_ABOUT_WHAT_YOU_BUILD]",
+  "about": [
+    "I work on [YOUR_AREA_OF_WORK].",
+    "[ONE_CONCRETE_DETAIL_ABOUT_HOW_YOU_WORK]"
+  ],
+  "about_footer": "[THREE_SHORT_PRINCIPLES]",
+  "now": [
+    "[WHAT_YOU_ARE_WORKING_ON_AND_WHY]"
+  ],
+  "now_items": [
+    {"icon": "file", "text": "[WHAT_YOU_ARE_BUILDING]"},
+    {"icon": "book", "text": "[WHAT_YOU_ARE_LEARNING]"},
+    {"icon": "people", "text": "[WHAT_YOU_ARE_OPEN_TO]"}
+  ],
+  "stack": [
+    {"area": "Languages", "tools": ["[YOUR_LANGUAGES]"]},
+    {"area": "Frontend", "tools": ["[YOUR_FRONTEND_TOOLS]"]},
+    {"area": "Backend", "tools": ["[YOUR_BACKEND_AND_DATABASES]"]},
+    {"area": "Infrastructure", "tools": ["[YOUR_INFRASTRUCTURE_TOOLS]"]},
+    {"area": "Tools", "tools": ["[YOUR_DEVELOPMENT_TOOLS]"]}
+  ],
+  "projects": [
+    {"name": "[PROJECT_1_NAME]", "description": "[WHAT_IT_DOES_AND_WHO_USES_IT]", "contribution": "[WHAT_YOU_IMPLEMENTED_OR_CHANGED]", "technologies": ["[PROJECT_1_TECHNOLOGIES]"], "year": "[YEAR]", "repository": null, "url": null},
+    {"name": "[PROJECT_2_NAME]", "description": "[THE_PROBLEM_THIS_PROJECT_ADDRESSES]", "contribution": "[WHAT_YOU_IMPLEMENTED_OR_CHANGED]", "technologies": ["[PROJECT_2_TECHNOLOGIES]"], "year": "[YEAR]", "repository": null, "url": null},
+    {"name": "[PROJECT_3_NAME]", "description": "[WHAT_IT_DOES_OR_WHAT_YOU_TESTED]", "contribution": "[WHAT_YOU_IMPLEMENTED_OR_LEARNED]", "technologies": ["[PROJECT_3_TECHNOLOGIES]"], "year": "[YEAR]", "repository": null, "url": null}
+  ],
+  "contacts": [
+    {"label": "GitHub", "detail": "vjrjunior", "url": "https://github.com/vjrjunior"},
+    {"label": "LinkedIn", "detail": "valdeir-junior", "url": "https://www.linkedin.com/in/valdeir-junior/"},
+    {"label": "Email", "detail": "vjrjunior@gmail.com", "url": "mailto:vjrjunior@gmail.com"}
+  ],
+  "dev": {"enabled": false, "username": null, "show_writing": true}
+}

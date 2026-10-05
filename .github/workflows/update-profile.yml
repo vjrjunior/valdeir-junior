@@ -1,0 +1,54 @@
+name: Update profile
+
+on:
+  schedule:
+    - cron: '17 9 * * *'
+      timezone: America/Sao_Paulo
+  workflow_dispatch:
+  push:
+    paths:
+      - 'profile.json'
+      - 'tools/profile/**'
+      - '.github/workflows/update-profile.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: profile-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Verify generator
+        run: python -m unittest discover -s tools/profile/tests -v
+      - name: Collect data and render profile
+        id: generate
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PROFILE_TOKEN: ${{ secrets.PROFILE_TOKEN }}
+          DEV_API_KEY: ${{ secrets.DEV_API_KEY }}
+        run: python tools/profile/update.py --allow-source-failures
+      - name: Commit updated profile
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add README.md preview.html assets tools/profile/data
+          if git diff --cached --quiet; then
+            echo 'Profile is already up to date.'
+          else
+            git commit -m 'Refresh profile data and assets'
+            git push
+          fi
+      - name: Report incomplete collection
+        if: steps.generate.outputs.sources_failed == 'true'
+        run: |
+          echo '::error::A configured source failed. The profile keeps its last successful data and shows its original sync date.'
+          exit 1
