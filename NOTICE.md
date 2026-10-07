@@ -2,5 +2,5 @@
 
 Two typefaces are redistributed with the generator and embedded into the SVGs. Both are licensed under the SIL Open Font License 1.1.
 
-- JetBrains Mono 400 and 700. Copyright 2020 The JetBrains Mono Project Authors. License: `tools/profile/fonts/OFL-JetBrainsMono.txt`.
-- Inter 800. Copyright 2016 The Inter Project Authors. License: `tools/profile/fonts/OFL-Inter.txt`.
+- Host Grotesk 400 and 500. Copyright 2023 The Host Grotesk Project Authors. License: `tools/profile/fonts/OFL-HostGrotesk.txt`.
+- DM Mono 400. Copyright 2020 The DM Mono Project Authors. License: `tools/profile/fonts/OFL-DMMono.txt`.

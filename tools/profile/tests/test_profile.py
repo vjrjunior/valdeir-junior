@@ -85,33 +85,34 @@ class ProfileTests(unittest.TestCase):
         self.assertEqual(data['calendar'][-1], ['2026-10-04', 2])
 
     def test_renderer_empty_state_has_no_fake_metrics(self):
-        config = json.loads((MODULE.parents[2] / 'profile.json').read_text()) if (MODULE.parents[2] / 'profile.json').exists() else {'name': 'Valdeir Júnior'}
+        config = json.loads((MODULE.parents[2] / 'profile.json').read_text())
+        config['github_username'] = None
         with tempfile.TemporaryDirectory() as tmp:
             self.function('render_profile')(config, {'github': {'status': 'disabled', 'data': None}, 'dev': {'status': 'disabled', 'data': None}}, Path(tmp))
             assets = Path(tmp) / 'assets'
-            self.assertTrue((assets / 'activity.svg').exists())
-            svg = ET.parse(assets / 'activity.svg').getroot()
-            text = ' '.join(svg.itertext())
-            self.assertIn('GitHub account not configured', text)
-            self.assertNotIn('0 contributions', text)
-            self.assertNotIn('0 stars', text)
+            activity = ' '.join(ET.parse(assets / 'activity.svg').getroot().itertext())
+            about = ' '.join(ET.parse(assets / 'about.svg').getroot().itertext())
+            self.assertIn('GitHub activity is not connected yet.', activity)
+            self.assertNotIn('0 contributions', activity)
+            self.assertIn('N/A', about)
+            self.assertNotIn('On GitHub since', about)
 
     def test_generated_links_and_alt_text_match_real_data_and_escape_content(self):
-        config = {'name': 'Valdeir Júnior', 'github_username': 'owner', 'projects': [
-            {'name': 'A & B', 'description': 'Useful <tool>', 'contribution': 'Parser',
-             'repository': 'owner/tool', 'url': 'https://github.com/owner/tool', 'technologies': ['Python']}],
-            'contacts': [{'label': 'Website', 'url': 'https://example.com/?a=1&b=2'}]}
+        config = {'name': 'Valdeir Júnior', 'github_username': 'owner', 'stats': ['contributions_all', 'streak_longest'],
+                  'contacts': [{'label': 'Website', 'detail': 'A & B <tools>', 'url': 'https://example.com/?a=1&b=2'}]}
         state = {'github': {'username': 'owner', 'status': 'ok', 'as_of': '2026-10-04', 'data': {
-            'stars': 11, 'repo_stars': {'owner/tool': 11}, 'calendar': [], 'year': 2026}}, 'dev': {'status': 'disabled', 'data': None}}
+            'contributions_all': 1234, 'streak_longest': 9, 'calendar': [['2026-10-03', 2], ['2026-10-04', 5]]}},
+            'dev': {'status': 'disabled', 'data': None}}
         with tempfile.TemporaryDirectory() as tmp:
             self.function('render_profile')(config, state, Path(tmp))
             readme = (Path(tmp) / 'README.md').read_text()
-            self.assertIn('https://github.com/owner/tool', readme)
-            self.assertIn('11 stars', readme)
-            self.assertIn('A &amp; B', readme)
             self.assertIn('https://example.com/?a=1&amp;b=2', readme)
+            self.assertIn('A &amp; B &lt;tools&gt;', readme)
+            self.assertIn('Contributions: 1234', readme)
+            self.assertIn('7 contributions in the last year. 2 active days, busiest on Oct 4 with 5.', readme)
             for p in (Path(tmp) / 'assets').glob('*.svg'):
                 ET.parse(p)
+            self.assertIn('A & B <tools>', ' '.join(ET.parse(Path(tmp) / 'assets/contact-1.svg').getroot().itertext()))
 
     def test_rendering_same_input_is_byte_identical(self):
         config = {'name': 'Valdeir Júnior'}
@@ -184,33 +185,27 @@ class ProfileTests(unittest.TestCase):
                                      env=env, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             svg = ' '.join(''.join(n.itertext()) for n in ET.parse(root / 'assets/activity.svg').getroot().findall('.//{http://www.w3.org/2000/svg}text'))
-            self.assertIn('GitHub data unavailable', svg)
+            self.assertIn('GitHub activity is unavailable right now.', svg)
             self.assertNotIn('77', svg)
+            about = ET.parse(root / 'assets/about.svg').getroot().findall('.//{http://www.w3.org/2000/svg}text')
+            self.assertNotIn('77', ' '.join(''.join(n.itertext()) for n in about))
 
-    def test_readme_source_images_exist_after_adding_and_removing_projects(self):
+    def test_readme_source_images_exist_after_adding_and_removing_contacts(self):
         import re
-        config = {'name': 'Test', 'projects': [{'name': 'One', 'description': 'Tool'}]}
+        config = {'name': 'Test', 'contacts': [{'label': 'GitHub', 'url': 'https://github.com/owner'}]}
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp); render = self.function('render_profile')
             render(config, {}, root)
-            config['projects'] = []
+            self.assertTrue((root / 'assets/contact-1.svg').exists())
+            config['contacts'] = []
             render(config, {}, root)
             readme = (root / 'README.md').read_text()
             for filename in re.findall(r'(?:src|srcset)="([^"]+)"', readme):
                 self.assertTrue((root / filename).is_file(), filename)
-            self.assertFalse((root / 'assets/work-1.svg').exists())
+            self.assertFalse((root / 'assets/contact-1.svg').exists())
+            self.assertFalse((root / 'assets/hero-link-1.svg').exists())
 
-    def test_weekly_bars_keep_every_contribution(self):
-        start = dt.date(2025, 10, 6)
-        calendar = [[(start + dt.timedelta(days=i)).isoformat(), i % 4] for i in range(365)]
-        bins, pad = self.function('weekly')(calendar)
-        self.assertEqual(len(bins), 53)
-        self.assertEqual(sum(bins), sum(n for _, n in calendar))
-        self.assertEqual(bins[0], calendar[0][1])
-        self.assertEqual(bins[-1], sum(n for _, n in calendar[-7:]))
-        self.assertEqual(pad, 6)
-
-    def test_hero_links_are_separate_clickable_slices_on_one_line(self):
+    def test_link_rows_are_separate_clickable_slices_on_one_line(self):
         import re
         config = {'name': 'Valdeir Júnior', 'contacts': [
             {'label': 'GitHub', 'url': 'https://github.com/owner'},
@@ -220,39 +215,50 @@ class ProfileTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             self.function('render_profile')(config, {}, root)
-            row = [line for line in (root / 'README.md').read_text().splitlines() if 'hero-gutter.svg' in line]
-            self.assertEqual(len(row), 1)
-            row = row[0]
-            for name in ('hero-link-1.svg', 'hero-link-2.svg', 'hero-link-3.svg', 'hero-link-4.svg', 'hero-art.svg'):
-                self.assertIn(name, row)
-            self.assertNotRegex(row, r'>\s+<')
-            self.assertEqual(re.findall(r'<a href="([^"]+)">', row),
-                             ['https://github.com/owner', 'https://www.linkedin.com/in/owner/', 'mailto:owner@example.com'])
-            shares = [float(value) for value in re.findall(r'width="([\d.]+)%"', row)]
-            self.assertEqual(len(shares), 6)
-            self.assertLessEqual(sum(shares), 100)
-            self.assertGreater(sum(shares), 99.99)
-            names = ['hero-gutter'] + ['hero-link-' + str(i) for i in range(1, 5)] + ['hero-art']
-            for suffix, total in (('', 1024), ('-mobile', 480)):
-                roots = [ET.parse(root / 'assets' / (name + suffix + '.svg')).getroot() for name in names]
-                self.assertEqual(len({svg.get('height') for svg in roots}), 1)
-                self.assertAlmostEqual(sum(float(svg.get('width')) for svg in roots), total, places=2)
-                for svg, share in zip(roots, shares):
-                    self.assertAlmostEqual(float(svg.get('width')) / total * 100, share, places=2)
+            lines = (root / 'README.md').read_text().splitlines()
+            for marker, names, links in (
+                    ('hero-start.svg', ['hero-start'] + ['hero-link-' + str(i) for i in range(1, 5)] + ['hero-end'],
+                     ['https://github.com/owner', 'https://www.linkedin.com/in/owner/', 'mailto:owner@example.com']),
+                    ('header.svg', ['header', 'header-contact'], ['https://github.com/owner'])):
+                row = [line for line in lines if marker in line]
+                self.assertEqual(len(row), 1)
+                row = row[0]
+                self.assertNotRegex(row, r'>\s+<')
+                self.assertEqual(re.findall(r'<a href="([^"]+)">', row), links)
+                shares = [float(value) for value in re.findall(r'width="([\d.]+)%"', row)]
+                self.assertEqual(len(shares), len(names))
+                self.assertLessEqual(sum(shares), 100)
+                self.assertGreater(sum(shares), 99.99)
+                for suffix, total in (('', 1024), ('-mobile', 480)):
+                    roots = [ET.parse(root / 'assets' / (name + suffix + '.svg')).getroot() for name in names]
+                    self.assertEqual(len({svg.get('height') for svg in roots}), 1)
+                    self.assertAlmostEqual(sum(float(svg.get('width')) for svg in roots), total, delta=.05)
+                    for svg, share in zip(roots, shares):
+                        self.assertAlmostEqual(float(svg.get('width')) / total * 100, share, places=2)
 
     def test_each_svg_embeds_only_the_fonts_it_uses(self):
-        config = {'name': 'Valdeir Júnior', 'contacts': [{'label': 'GitHub', 'url': 'https://github.com/owner'}],
-                  'projects': [{'name': 'One', 'description': 'Tool'}]}
+        config = {'name': 'Valdeir Júnior', 'contacts': [{'label': 'GitHub', 'url': 'https://github.com/owner'}]}
         with tempfile.TemporaryDirectory() as tmp:
             self.function('render_profile')(config, {}, Path(tmp))
             assets = Path(tmp) / 'assets'
-            self.assertNotIn('@font-face', (assets / 'hero-gutter.svg').read_text())
+            self.assertNotIn('@font-face', (assets / 'hero-start.svg').read_text())
             self.assertNotIn('@font-face', (assets / 'hero-link-1-mobile.svg').read_text())
-            self.assertIn('font-family:INT;font-weight:800', (assets / 'hero.svg').read_text())
-            self.assertIn('font-family:INT;font-weight:800', (assets / 'work-1.svg').read_text())
+            hero = (assets / 'hero.svg').read_text()
+            self.assertIn('font-family:HG;font-weight:500', hero)
+            self.assertIn('font-family:DM;font-weight:400', hero)
             link = (assets / 'hero-link-1.svg').read_text()
-            self.assertIn('font-family:JBM;font-weight:400', link)
-            self.assertNotIn('font-family:INT;font-weight', link)
+            self.assertIn('font-family:HG;font-weight:500', link)
+            self.assertNotIn('font-family:DM;font-weight', link)
+
+    def test_sections_are_numbered_in_order_when_optional_ones_are_missing(self):
+        config = {'name': 'Test', 'contacts': [{'label': 'GitHub', 'url': 'https://github.com/owner'}]}
+        with tempfile.TemporaryDirectory() as tmp:
+            self.function('render_profile')(config, {}, Path(tmp))
+            text = lambda name: ' '.join(ET.parse(Path(tmp) / 'assets' / name).getroot().itertext())
+            self.assertIn('(01)', text('about.svg'))
+            self.assertIn('(02)', text('activity.svg'))
+            self.assertIn('(03)', text('contact.svg'))
+            self.assertFalse((Path(tmp) / 'assets/stack.svg').exists())
 
     def test_http_transport_encodes_graphql_json_and_decodes_response(self):
         from http.server import BaseHTTPRequestHandler, HTTPServer

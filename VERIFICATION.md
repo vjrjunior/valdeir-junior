@@ -1,10 +1,11 @@
 # Verification
 
-Verified locally on 2026-10-05, after the layout was rebuilt from the design mockup.
+Verified on 2026-10-06, after the layout moved to the dot-art design.
 
-- 20 behavior tests passed on Python 3.9.6: repository pagination, exact 365-day calendar, streak gaps, stale-source preservation, account changes, empty DEV articles, wrong-account DEV keys, zero-activity chart, weekly bars, escaping and live links, hero link slices, per-SVG font embedding, stale asset cleanup, deterministic generation, offline CLI identity filtering, and JSON HTTP transport.
-- Desktop (846 px content width) and 375 px mobile previews were inspected in headless Chromium, with no console errors. Two profiles were rendered: the delivered placeholder profile, and a scratch profile outside the repository carrying the mockup's sample copy and a synthetic contribution calendar, compared against the mockup.
-- All 26 delivered SVGs parse as XML, have accessible titles and descriptions and a reduced-motion rule. All README image paths exist.
-- Workflow YAML parsed successfully.
+- 20 behavior tests passed on Python 3.9.6: repository pagination, exact 365-day calendar, streak gaps, stale-source preservation, account changes, empty DEV articles, wrong-account DEV keys, zero-activity calendar, escaping and live links, top bar and hero link slices, per-SVG font embedding, section numbering with optional sections missing, stale asset cleanup, deterministic generation, offline CLI identity filtering, and JSON HTTP transport.
+- All 34 delivered SVGs parse as XML, have accessible titles and descriptions and a reduced-motion rule. All README image paths exist.
+- Desktop (838 px README width) and 390 px mobile previews were inspected in headless Chromium. A scratch profile outside the repository with synthetic DEV articles was rendered to check the optional Writing section.
+- The same layout was rendered by github.com from a pushed copy: all images loaded, rows had no gaps, the mobile assets were selected at 390 px, and every link pointed to its contact. A faint hairline was visible on the light theme where the two top bar slices meet.
+- The scheduled workflow has collected live GitHub data and committed it daily since 2026-10-05.
 
-Not verified: an authenticated live GitHub collection, a GitHub Actions run, a live DEV collection in this revision, and rendering on github.com itself. The last one covers the `<picture>` mobile switch and the hero link row, whose slices rely on percentage widths staying on one line. GitHub GraphQL and DEV collection are exercised against controlled API responses only. The delivered data cache is empty; no personal metrics are fabricated.
+Not verified: a live DEV collection in this revision, and the README on the profile page itself, which reads from the repository named after the account.
