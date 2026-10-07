@@ -1,0 +1,110 @@
+{
+  "name": "Valdeir Júnior",
+  "github_username": "vjrjunior",
+  "wordmark": "valdeir",
+  "role": "Software engineer",
+  "headline": "Software engineer interested in systems, products and tools that make developers more productive.",
+  "cta": "Get in touch",
+  "nav": [
+    "Stack",
+    "Now",
+    "Activity",
+    "Contact"
+  ],
+  "about": "I’m a software engineer who enjoys turning complex problems into simple, reliable solutions.",
+  "about_more": "I like to work across the stack, from infrastructure to interfaces, and I’m always exploring new tools.",
+  "stats": [
+    "years",
+    "contributions_all",
+    "streak_longest"
+  ],
+  "stack_title": [
+    "From interfaces",
+    "to infrastructure."
+  ],
+  "stack_intro": "The languages, frameworks and platforms I reach for to design, ship and run software.",
+  "stack": [
+    {
+      "area": "Languages",
+      "motif": "morph",
+      "tools": [
+        "TypeScript",
+        "Python"
+      ]
+    },
+    {
+      "area": "Frontend",
+      "motif": "stream",
+      "tools": [
+        "React",
+        "Next.js",
+        "Tailwind CSS"
+      ]
+    },
+    {
+      "area": "Backend",
+      "motif": "ripple",
+      "tools": [
+        "Node.js",
+        "PostgreSQL",
+        "Redis"
+      ]
+    },
+    {
+      "area": "Infrastructure",
+      "motif": "globe",
+      "tools": [
+        "Docker",
+        "AWS"
+      ]
+    },
+    {
+      "area": "Tools",
+      "motif": "silk",
+      "tools": [
+        "Git"
+      ]
+    }
+  ],
+  "now_title": [
+    "Building tools that improve",
+    "how developers work."
+  ],
+  "now_intro": "Exploring ideas in small projects, then keeping the ones that hold up.",
+  "now_items": [
+    {
+      "tag": "Now",
+      "title": "Building",
+      "text": "Personal projects and tools that make developers more productive."
+    },
+    {
+      "tag": "Always",
+      "title": "Learning",
+      "text": "Experimenting with new technologies and ways to build better software."
+    }
+  ],
+  "contact_title": [
+    "Say hello,",
+    "or follow along."
+  ],
+  "contact_intro": "Email for a conversation, GitHub for the code, LinkedIn for the rest.",
+  "contacts": [
+    {
+      "label": "Email",
+      "detail": "vjrjunior@gmail.com",
+      "url": "mailto:vjrjunior@gmail.com",
+      "primary": true,
+      "cta": "Email me"
+    },
+    {
+      "label": "LinkedIn",
+      "detail": "in/valdeir-junior",
+      "url": "https://www.linkedin.com/in/valdeir-junior/"
+    },
+    {
+      "label": "GitHub",
+      "detail": "@vjrjunior",
+      "url": "https://github.com/vjrjunior"
+    }
+  ]
+}
