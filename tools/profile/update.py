@@ -8,7 +8,6 @@ import json
 import math
 import os
 from pathlib import Path
-import random
 import re
 import sys
 import urllib.error
@@ -284,6 +283,7 @@ def mix(alpha, color=INK, base=PAPER):
 
 
 INK75, INK70, INK35 = mix(.75), mix(.7), mix(.35)
+JOINT = mix(.5, MUTED)
 
 
 def n(value):
@@ -295,11 +295,6 @@ def n(value):
 
 def clamp01(value):
     return 0.0 if value < 0 else 1.0 if value > 1 else value
-
-
-def smoothstep(edge0, edge1, value):
-    t = clamp01((value - edge0) / (edge1 - edge0))
-    return t * t * (3 - 2 * t)
 
 
 def measure(text, size, font='sans', spacing=0.0):
@@ -323,164 +318,6 @@ def wrap_runs(runs, width, size, font='sans', spacing=0.0):
     if line:
         lines.append(line)
     return lines
-
-
-def make_noise(seed):
-    rng = random.Random(seed)
-    source = list(range(256))
-    rng.shuffle(source)
-    perm = source * 2
-    mod12 = [p % 12 for p in perm]
-    grads = [(1, 1, 0), (-1, 1, 0), (1, -1, 0), (-1, -1, 0), (1, 0, 1), (-1, 0, 1),
-             (1, 0, -1), (-1, 0, -1), (0, 1, 1), (0, -1, 1), (0, 1, -1), (0, -1, -1)]
-    f3, g3 = 1 / 3, 1 / 6
-
-    def noise(x, y, z):
-        skew = (x + y + z) * f3
-        i, j, k = math.floor(x + skew), math.floor(y + skew), math.floor(z + skew)
-        unskew = (i + j + k) * g3
-        x0, y0, z0 = x - (i - unskew), y - (j - unskew), z - (k - unskew)
-        if x0 >= y0:
-            if y0 >= z0:
-                o1, o2 = (1, 0, 0), (1, 1, 0)
-            elif x0 >= z0:
-                o1, o2 = (1, 0, 0), (1, 0, 1)
-            else:
-                o1, o2 = (0, 0, 1), (1, 0, 1)
-        elif y0 < z0:
-            o1, o2 = (0, 0, 1), (0, 1, 1)
-        elif x0 < z0:
-            o1, o2 = (0, 1, 0), (0, 1, 1)
-        else:
-            o1, o2 = (0, 1, 0), (1, 1, 0)
-        ii, jj, kk = i & 255, j & 255, k & 255
-        total = 0.0
-        for (di, dj, dk), shift in (((0, 0, 0), 0), (o1, g3), (o2, 2 * g3), ((1, 1, 1), 3 * g3)):
-            cx, cy, cz = x0 - di + shift, y0 - dj + shift, z0 - dk + shift
-            t0 = .6 - cx * cx - cy * cy - cz * cz
-            if t0 > 0:
-                g = grads[mod12[ii + di + perm[jj + dj + perm[kk + dk]]]]
-                t0 *= t0
-                total += t0 * t0 * (g[0] * cx + g[1] * cy + g[2] * cz)
-        return 32 * total
-    return noise
-
-
-def silk_field(seed=3, tilt=0.0):
-    noise = make_noise(seed)
-    ribbons = [dict(angle=-.62 + tilt, length=.86, width=.2, offset=0, amp=(.11, .04), freq=(2.6, 5.9), speed=(.36, -.58),
-                    twist_freq=2.1, twist_speed=.28, phase=0, strength=1),
-               dict(angle=-.48 + tilt, length=.66, width=.11, offset=.1, amp=(.12, .03), freq=(1.9, 6.8), speed=(-.28, .46),
-                    twist_freq=2.9, twist_speed=-.4, phase=2.1, strength=.78)]
-    for r in ribbons:
-        r['cos'], r['sin'] = math.cos(r['angle']), math.sin(r['angle'])
-        r['reach'] = abs(r['amp'][0]) + abs(r['amp'][1]) + r['width'] + .12
-
-    def field(u, v, t, col, row):
-        if not any(abs(u * r['cos'] + v * r['sin']) < r['length'] + .12 and abs(-u * r['sin'] + v * r['cos'] - r['offset']) < r['reach']
-                   for r in ribbons):
-            return 0
-        broad = noise(u * 1.25, v * 1.25, t * .1)
-        detail = noise(u * 3.2 + 11.7, v * 3.2 - 4.3, t * .2)
-        value = 0
-        for r in ribbons:
-            a = u * r['cos'] + v * r['sin']
-            b = -u * r['sin'] + v * r['cos']
-            along = abs(a + broad * .1) / r['length']
-            if along >= 1:
-                continue
-            center = (r['offset'] + r['amp'][0] * math.sin(a * r['freq'][0] + t * r['speed'][0] + r['phase'])
-                      + r['amp'][1] * math.sin(a * r['freq'][1] + t * r['speed'][1] + r['phase'] * 1.7) + broad * .06)
-            twist = a * r['twist_freq'] - t * r['twist_speed'] + r['phase'] + broad * .7
-            facing = abs(math.cos(twist))
-            half = r['width'] * (1 - along * along) * (.16 + .84 * facing)
-            across = (b - center + detail * .028) / half
-            distance = abs(across)
-            if distance >= 1:
-                continue
-            body = 1 - smoothstep(.55, 1, distance)
-            shade = clamp01(.5 + .38 * across * math.sin(twist) + .34 * (1 - facing))
-            fade = 1 - smoothstep(.6, 1, along)
-            value = max(value, body * shade * fade * r['strength'])
-        return value
-    return field
-
-
-def globe_field(seed=11):
-    noise = make_noise(seed)
-    radius, tilt = .38, .4
-    light = (-.52, -.56, .64)
-
-    def field(u, v, t, col, row):
-        distance = math.hypot(u, v)
-        if distance >= radius:
-            ex, ey = u / (radius * 1.6), (v + u * .18) / (radius * .42)
-            ring = 1 - abs(math.hypot(ex, ey) - 1) / .16
-            sx = math.cos(t * .6) * radius * 1.6
-            sy = math.sin(t * .6) * radius * .42 - sx * .18
-            satellite = math.exp(-((u - sx) ** 2 + (v - sy) ** 2) / .0014)
-            return max(ring * .42 if ring > 0 else 0, satellite)
-        nx, ny = u / radius, v / radius
-        nz = math.sqrt(max(0, 1 - nx * nx - ny * ny))
-        ty, tz = ny * math.cos(tilt) - nz * math.sin(tilt), ny * math.sin(tilt) + nz * math.cos(tilt)
-        spin = t * .32
-        bx, bz = nx * math.cos(spin) + tz * math.sin(spin), tz * math.cos(spin) - nx * math.sin(spin)
-        land = noise(bx * 1.7, ty * 1.7, bz * 1.7)
-        lit = max(0, nx * light[0] + ny * light[1] + nz * light[2])
-        rim = smoothstep(.82, 1, distance / radius) * .3
-        return max(.42 + .58 * lit if land > .08 else .08 + .22 * lit, rim)
-    return field
-
-
-def ripple_field():
-    def field(u, v, t, col, row):
-        x1, y1 = -.34 + .06 * math.sin(t * .37), .05 * math.cos(t * .29)
-        x2, y2 = .34 + .05 * math.cos(t * .31), -.06 * math.sin(t * .43)
-        wave = math.cos(math.hypot(u - x1, v - y1) * 32 - t * 2.4) + math.cos(math.hypot(u - x2, v - y2) * 32 - t * 2.4)
-        falloff = math.exp(-(u * u * .7 + v * v * 2.4) * 1.8)
-        return clamp01((.5 + .25 * wave) * falloff * 1.2)
-    return field
-
-
-def stream_field(seed=5):
-    rng = random.Random(seed)
-    lanes = [(.12 + rng.random() * .42, rng.random() * 10, .9 + rng.random() * 1.8, .18 + rng.random() * .42, .55 + rng.random() * .45)
-             for _ in range(64)]
-    size = {'cols': 1}
-
-    def field(u, v, t, col, row):
-        if row % 2:
-            return 0
-        speed, offset, frequency, duty, strength = lanes[(row >> 1) % len(lanes)]
-        edge = min(col, size['cols'] - 1 - col)
-        fade = 1 if edge >= 6 else max(0, edge) / 6
-        x = u * frequency - t * speed + offset
-        phase = x - math.floor(x)
-        if phase > duty:
-            return .03 * fade
-        return (.28 + .72 * phase / duty) * strength * fade
-    field.prepare = lambda cols, rows: size.update(cols=cols)
-    return field
-
-
-def morph_field():
-    size, anchor = .33, .045
-
-    def field(u, v, t, col, row):
-        angle = t * .22
-        x = u * math.cos(angle) + v * math.sin(angle)
-        y = -u * math.sin(angle) + v * math.cos(angle)
-        ax, ay = abs(x), abs(y)
-        if (abs(ax - size) < anchor and ay < anchor) or (abs(ay - size) < anchor and ax < anchor):
-            return 1
-        power = 2 + (.5 + .5 * math.sin(t * .7)) * 4
-        radius = (ax ** power + ay ** power) ** (1 / power)
-        value = (1 - smoothstep(.014, .05, abs(radius - size))) * .85
-        if radius < size:
-            inner = .5 + .5 * math.cos(radius * 38 - t * 2)
-            value = max(value, inner * .32 * (1 - radius / size) + .04)
-        return value
-    return field
 
 
 def ring(cx):
@@ -561,8 +398,126 @@ def wordmark_field(word):
     return field
 
 
-MOTIFS = {'silk': lambda: silk_field(7, .25), 'globe': globe_field, 'ripple': ripple_field, 'stream': stream_field, 'morph': morph_field}
-MOTIF_ORDER = ['morph', 'stream', 'globe', 'ripple', 'silk']
+SPRITES = {
+    'code': (['...66............66...',
+              '..6................6..',
+              '..6................6..',
+              '..6..5555.333......6..',
+              '..6................6..',
+              '..6....444.3333....6..',
+              '.6..................6.',
+              '6......333.55........6',
+              '.6..................6.',
+              '..6....44444.......6..',
+              '..6................6..',
+              '..6..333.a.........6..',
+              '..6................6..',
+              '..6................6..',
+              '...66............66...'],
+             {'a': (6, 'blink', 1.1, 0)}),
+    'browser': (['5555555555555555555555',
+                 '5.6.4.4..............5',
+                 '5555555555555555555555',
+                 '5....................5',
+                 '5.aaa.......aa.aa.aa.5',
+                 '5....................5',
+                 '5.bbbbbbbb..aaaaaaaa.5',
+                 '5.bbbbbbbb..aaaaaa...5',
+                 '5.bbbbbbbb..aaaaaaa..5',
+                 '5.bbbbbbbb..aaaa.....5',
+                 '5....................5',
+                 '5.bbbbb.bbbbbb.bbbbb.5',
+                 '5.bbbbb.bbbbbb.bbbbb.5',
+                 '5....................5',
+                 '5555555555555555555555'],
+                {'a': (5, 'shimmer', 2.4, 0), 'b': (4, 'shimmer', 2.4, 0)}),
+    'database': (['....5555555555....',
+                  '.555..........555.',
+                  '6................6',
+                  '6666..........6666',
+                  '6...6666666666...6',
+                  '6................6',
+                  '6............a...6',
+                  '6666..........6666',
+                  '6...6666666666...6',
+                  '6................6',
+                  '6............b...6',
+                  '6666..........6666',
+                  '6...6666666666...6',
+                  '6................6',
+                  '6............c...6',
+                  '.666..........666.',
+                  '....6666666666....'],
+                 {'a': (6, 'flash', 1.8, 0), 'b': (6, 'flash', 1.8, .3), 'c': (6, 'flash', 1.8, .6)}),
+    'server': (['.55555555555555555555.',
+                '5....................5',
+                '5.a.b....3.3.3.3.3.3.5',
+                '5....................5',
+                '.55555555555555555555.',
+                '......................',
+                '.55555555555555555555.',
+                '5....................5',
+                '5.c.d....3.3.3.3.3.3.5',
+                '5....................5',
+                '.55555555555555555555.',
+                '......................',
+                '.55555555555555555555.',
+                '5....................5',
+                '5.e.f....3.3.3.3.3.3.5',
+                '5....................5',
+                '.55555555555555555555.'],
+               {'a': (6, 'flash', 1.3, 0), 'b': (5, 'blink', 2.1, .4), 'c': (6, 'flash', 1.7, .9),
+                'd': (5, 'blink', 2.7, 1.3), 'e': (6, 'flash', 1.1, .5), 'f': (5, 'blink', 3.1, 2)}),
+    'branch': (['..............666...666..',
+                '..............6c65556d6..',
+                '..............666...666..',
+                '.............5...........',
+                '............5............',
+                '...........5.............',
+                '..........5..............',
+                '.........5...............',
+                '666...666...666...666....',
+                '6a65556b65556e65556f65555',
+                '666...666...666...666....'],
+               {'a': (6, 'flash', 3, 0), 'b': (6, 'flash', 3, .6), 'e': (6, 'flash', 3, 1.2),
+                'c': (6, 'flash', 3, 1.4), 'f': (6, 'flash', 3, 1.8), 'd': (6, 'flash', 3, 2)}),
+}
+SPRITE_FRAMES = {'blink': '0%,50%{opacity:1}50.1%,100%{opacity:0}',
+                 'flash': '0%{opacity:1}40%,100%{opacity:.15}',
+                 'shimmer': '0%,40%,100%{opacity:.3}20%{opacity:1}'}
+CODE = '''import { collect } from './sources'
+import { render } from './render'
+import { commit } from './git'
+
+export async function build(profile: Profile) {
+  const data = await collect(profile.sources)
+  const sections = profile.layout.map((name) => {
+    const section = registry[name]
+    if (!section) return null
+    return section.render(data, { width: 1024 })
+  })
+  return sections.filter(Boolean).join('\\n')
+}
+
+export function schedule(job: Job, every = '1d') {
+  return cron(every, async () => {
+    const result = await job.run()
+    if (result.changed) {
+      await commit(result.files, 'Refresh profile')
+    }
+  })
+}
+
+export async function ship(branch: string) {
+  const checks = await run(['lint', 'test', 'build'])
+  if (checks.some((check) => !check.ok)) {
+    throw new Error(`Blocked: ${checks.length} checks`)
+  }
+  return deploy(branch, { preview: false })
+}'''
+CODE_KEYWORDS = {'import', 'from', 'export', 'async', 'function', 'const', 'await', 'return', 'if', 'null', 'throw', 'new', 'false', 'true'}
+CODE_TOKENS = re.compile(r"'[^']*'|\d+|[A-Za-z_]\w*|\S")
+TYPE_STEP, TYPE_PAUSE, TYPE_SCROLL = .02, .26, .14
 
 
 def to_level(value, col, row):
@@ -592,7 +547,7 @@ class Svg:
         self.mobile = width < 800 if mobile is None else mobile
         self.m = 20 if self.mobile else 40
         self.content = width - 2 * self.m
-        self.parts, self.defs, self.fonts, self.serial = [], [], set(), 0
+        self.parts, self.defs, self.fonts, self.serial, self.css = [], [], set(), 0, []
 
     def col(self, index):
         width = (self.content - 11 * 24) / 12
@@ -660,6 +615,10 @@ class Svg:
 
     def vline(self, x, y1, y2, color=LINE):
         self.raw(f'<path d="M{n(x + .5)} {n(y1)}V{n(y2)}" stroke="{color}"/>')
+
+    def joints(self, points):
+        for x, y in dict.fromkeys(points):
+            self.raw(f'<rect x="{n(x - 2)}" y="{n(y - 2)}" width="5" height="5" fill="{JOINT}"/>')
 
     def square(self, x, y, size=6, color=ACCENT, cls=''):
         extra = f' class="{cls}"' if cls else ''
@@ -732,6 +691,33 @@ class Svg:
             self.grid(x, y, cols * cell, rows * cell, cell)
         self.cells(x, y, cell, buckets, glint)
 
+    def sprite(self, x, y, width, height, cell, name):
+        rows, groups = SPRITES[name]
+        cols, count = int(width // cell), int(height // cell)
+        x += (width - cols * cell) / 2
+        y += (height - count * cell) / 2
+        self.grid(x, y, cols * cell, count * cell, cell)
+        left, top = (cols - len(rows[0])) // 2, (count + 4 - len(rows)) // 2
+        buckets, animated = [[] for _ in DOT_SIZES], {}
+        for row, line in enumerate(rows):
+            for col, mark in enumerate(line):
+                if mark.isdigit():
+                    buckets[int(mark) - 1].append((left + col, top + row))
+                elif mark in groups:
+                    level, kind, period, delay = groups[mark]
+                    if kind == 'shimmer':
+                        delay += col * period / 2 / len(line)
+                    animated.setdefault((level, kind, period, round((period - delay) % period, 3)), []).append((left + col, top + row))
+        self.cells(x, y, cell, buckets)
+        for (level, kind, period, delay), cells in animated.items():
+            cls = self.uid('s')
+            if f'@keyframes {kind}{{' not in ''.join(self.css):
+                self.css.append(f'@keyframes {kind}{{{SPRITE_FRAMES[kind]}}}')
+            self.css.append(f'.{cls}{{animation:{kind} {n(period)}s linear {n(-delay)}s infinite}}')
+            self.raw(f'<g class="{cls}">')
+            self.cells(x, y, cell, [cells if index == level - 1 else [] for index in range(len(DOT_SIZES))])
+            self.raw('</g>')
+
     def grid(self, x, y, width, height, cell):
         pid = self.uid('g')
         size = max(1, round(cell * .18))
@@ -739,6 +725,7 @@ class Svg:
         self.defs.append(f'<pattern id="{pid}" width="{n(cell)}" height="{n(cell)}" patternUnits="userSpaceOnUse" x="{n(x)}" y="{n(y)}">'
                          f'<rect x="{n(offset)}" y="{n(offset)}" width="{size}" height="{size}" fill="{GRID}"/></pattern>')
         self.raw(f'<rect x="{n(x)}" y="{n(y)}" width="{n(width)}" height="{n(height)}" fill="url(#{pid})"/>')
+        return pid
 
     def cells(self, x, y, cell, buckets, glint=False):
         for level, cells in enumerate(buckets):
@@ -762,7 +749,7 @@ class Svg:
         css = ("text{font-family:HG,'Host Grotesk',ui-sans-serif,system-ui,sans-serif}.m{font-family:DM,'DM Mono',ui-monospace,Menlo,monospace}"
                '@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}.pulse{animation:pulse 2s ease-in-out infinite}'
                '@keyframes glint{0%,100%{opacity:1}50%{opacity:.55}}.glint{animation:glint 6s ease-in-out infinite}'
-               '@media(prefers-reduced-motion:reduce){*{animation:none!important}}')
+               + ''.join(self.css) + '@media(prefers-reduced-motion:reduce){*{animation:none!important}}')
         defs = '<defs>' + ''.join(self.defs) + '</defs>' if self.defs else ''
         return (f'<svg xmlns="http://www.w3.org/2000/svg" width="{n(self.width)}" height="{n(height)}" viewBox="0 0 {n(self.width)} {n(height)}" '
                 f'role="img" aria-labelledby="t d"><title id="t">{html.escape(title)}</title><desc id="d">{html.escape(description)}</desc>'
@@ -788,41 +775,65 @@ def contact_order(content):
     return sorted(contacts, key=lambda contact: not contact.get('primary'))
 
 
-def header_left(content, width, mobile):
-    c = Svg(width, mobile)
-    height = 64 if c.mobile else 76
-    middle = height / 2
-    pattern = [[5, 3, 1], [3, 5, 3], [1, 3, 5]]
-    for row, levels in enumerate(pattern):
-        for col, level in enumerate(levels):
-            size = round(6 * DOT_SIZES[level])
-            c.square(c.m + col * 6 + (6 - size) / 2, middle - 9 + row * 6 + (6 - size) / 2, size, DOT_COLORS[level])
-    c.text(c.m + 28, middle + 6.5, str(content.get('name') or '').lower(), 19 if c.mobile else 20, INK, 'sans', 500, tracking=-.02)
-    if not c.mobile:
-        items = [str(item).upper() for item in content.get('nav') or []]
-        gap = 34
-        total = sum(measure(item, 12, 'mono', 1.68) - 1.68 for item in items) + gap * (len(items) - 1)
-        cursor = DESKTOP / 2 - total / 2
-        for item in items:
-            cursor += c.mono(cursor, middle + 4.5, item, MUTED, 12) + gap
-    return c.render(height, str(content.get('name') or ''), 'Header'), height
+def code_typing(c, x, y, cell, columns, grid, bottom, fade, solid=0):
+    lines = [line[:columns] for line in CODE.splitlines()]
+    count, pitch = len(lines), 2 * cell
+    buckets = [[] for _ in DOT_SIZES]
+    timeline, clock = [], .2
+    for index, line in enumerate(lines):
+        for match in CODE_TOKENS.finditer(line):
+            token = match.group()
+            level = 6 if token in CODE_KEYWORDS else 5 if token[0] in "'0123456789" else 4 if token[0].isalpha() else 3
+            rows = [2 * index] + ([2 * (index - count)] if y + 2 * (index - count) * cell + cell > 0 else [])
+            buckets[level - 1].extend((col, row) for row in rows for col in range(match.start(), match.end()))
+        indent = len(line) - len(line.lstrip())
+        length = len(line) - indent
+        timeline.append((indent, length, clock, clock + length * TYPE_STEP))
+        clock += length * TYPE_STEP + (TYPE_PAUSE if length else TYPE_SCROLL + .02)
+    total = clock
 
+    def pct(seconds):
+        return f'{seconds / total * 100:.3f}'.rstrip('0').rstrip('.') + '%'
 
-def header_right(content, width, mobile):
-    c = Svg(width, mobile)
-    height = 64 if c.mobile else 76
-    primary = contact_order(content)[0] if content.get('contacts') else None
-    if primary:
-        label = str(primary.get('label') if c.mobile else content.get('cta') or primary.get('label'))
-        size = 14 if c.mobile else 15
-        pill_height = 36 if c.mobile else 40
-        pill_width = 32 + measure(label, size) + 8 + 9
-        x = width - c.m - pill_width
-        y = (height - pill_height) / 2
-        c.raw(f'<rect x="{n(x)}" y="{n(y)}" width="{n(pill_width)}" height="{pill_height}" rx="{pill_height / 2}" fill="{INK}"/>')
-        c.text(x + 16, y + pill_height / 2 + size * .35, label, size, PAPER, 'sans', 500)
-        c.arrow(x + 16 + measure(label, size) + 8, y + pill_height / 2 - 4.5, 9, PAPER, 1.5)
-    return c.render(height, 'Get in touch', 'Contact button'), height
+    loop = f'{total:.2f}s linear infinite'
+    step = 'animation-timing-function:steps(1,end)'
+    scroll, moves = ['0%{transform:translateY(0)}'], [f'0%{{transform:translateX({n(timeline[0][0] * cell)}px);{step}}}']
+    rules = []
+    clip = c.uid('c')
+    c.defs.append(f'<clipPath id="{clip}"><rect width="{c.width}" height="{n(bottom)}"/></clipPath>')
+    c.raw(f'<g clip-path="url(#{clip})"><g class="tys">')
+    c.cells(x, y, cell, buckets)
+    for index, (indent, length, start, end) in enumerate(timeline):
+        scroll.append(f'{pct(end)}{{transform:translateY({-index * pitch}px);animation-timing-function:cubic-bezier(.2,.7,.2,1)}}')
+        scroll.append(f'{pct(end + TYPE_SCROLL)}{{transform:translateY({-(index + 1) * pitch}px)}}')
+        if length:
+            width = length * cell
+            box = f'x="{n(x + indent * cell)}" y="{n(y + index * pitch - 2)}" width="{n(width)}" height="{n(cell + 4)}"'
+            c.raw(f'<g class="ty{index}"><rect {box} fill="{PAPER}"/><rect {box} fill="url(#{grid})"/></g>')
+            rules.append(f'.ty{index}{{animation:ty{index} {loop}}}@keyframes ty{index}{{0%,{pct(start)}{{transform:translateX(0);'
+                         f'animation-timing-function:steps({length},end)}}{pct(end)},100%{{transform:translateX({n(width)}px)}}}}')
+            moves.append(f'{pct(start)}{{transform:translateX({n(indent * cell)}px);animation-timing-function:steps({length},end)}}')
+            moves.append(f'{pct(end)}{{transform:translateX({n((indent + length) * cell)}px);{step}}}')
+        following = timeline[(index + 1) % count][0]
+        moves.append(f'{pct(end + .06)}{{transform:translateX({n(following * cell)}px);{step}}}')
+    c.raw('</g></g>')
+    scroll.append(f'100%{{transform:translateY({-count * pitch}px)}}')
+    moves.append(f'100%{{transform:translateX({n(timeline[0][0] * cell)}px)}}')
+    rules.append(f'.tys{{animation:tys {loop}}}@keyframes tys{{' + ''.join(scroll) + '}')
+    rules.append(f'.tyc{{transform:translateX({n(timeline[0][0] * cell)}px);animation:tyc {loop}}}@keyframes tyc{{' + ''.join(moves) + '}')
+    c.raw(f'<rect x="{n(x - cell)}" y="{n(y)}" width="{n((columns + 2) * cell)}" height="{n(cell)}" fill="{ACCENT}" fill-opacity=".07"/>')
+    low = c.uid('f')
+    c.defs.append(f'<linearGradient id="{low}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="{PAPER}" stop-opacity="0"/>'
+                  f'<stop offset="{n((5 * pitch + cell) / (bottom - y + 5 * pitch))}" stop-color="{PAPER}" stop-opacity=".7"/>'
+                  f'<stop offset="1" stop-color="{PAPER}"/></linearGradient>')
+    c.raw(f'<rect y="{n(y - 5 * pitch)}" width="{c.width}" height="{n(bottom - y + 5 * pitch)}" fill="url(#{low})"/>')
+    size = max(1, round(cell * DOT_SIZES[-1]))
+    c.raw(f'<rect class="tyc" x="{n(x + (cell - size) / 2)}" y="{n(y + (cell - size) / 2)}" width="{size}" height="{size}" fill="{INK}"/>')
+    gid = c.uid('f')
+    c.defs.append(f'<linearGradient id="{gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="{n(solid / fade)}" stop-color="{PAPER}"/>'
+                  f'<stop offset="1" stop-color="{PAPER}" stop-opacity="0"/></linearGradient>')
+    c.raw(f'<rect width="{c.width}" height="{n(fade)}" fill="url(#{gid})"/>')
+    c.css.extend(rules)
 
 
 def hero(content, github, as_of, width):
@@ -842,8 +853,7 @@ def hero(content, github, as_of, width):
         paragraph_x, paragraph_top, paragraph_width, leading = c.m, second + 50, c.content, 27
         count = len(wrap_runs([(headline_text, INK75)], paragraph_width, 17))
         height = math.ceil(paragraph_top + (count - 1) * leading + 26)
-        c.dots(0, 0, width, art, 5, silk_field(3), .54, .4, 1.12, 4.0, glint=True)
-        fade_top, fade_bottom = art * .38, art
+        code_typing(c, 160, 235, 5, 60, c.grid(0, 0, width, art, 5), art, 120, 64)
     else:
         height = art = 600
         size = fit(lines, 140, c.span(8), -.06)
@@ -851,13 +861,8 @@ def hero(content, github, as_of, width):
         paragraph_x, paragraph_width, leading = c.col(8), c.span(4), 27.5
         count = len(wrap_runs([(headline_text, INK75)], paragraph_width, 17))
         paragraph_top = second - (count - 1) * leading
-        c.dots(0, 0, width, art, 8, silk_field(3), .64, .4, 1.05, 4.0, glint=True)
-        fade_top, fade_bottom = height * .5, height
+        code_typing(c, 464, 456, 8, 65, c.grid(0, 0, width, art, 8), art, 96)
     first = second - size * .88
-    gid = c.uid('f')
-    c.defs.append(f'<linearGradient id="{gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="{PAPER}" stop-opacity="0"/>'
-                  f'<stop offset=".55" stop-color="{PAPER}" stop-opacity=".8"/><stop offset="1" stop-color="{PAPER}"/></linearGradient>')
-    c.raw(f'<rect x="0" y="{n(fade_top)}" width="{width}" height="{n(fade_bottom - fade_top)}" fill="url(#{gid})"/>')
     for index, line in enumerate(meta):
         c.mono(c.m, 34 + index * 18, line)
     if status:
@@ -953,7 +958,6 @@ def about(content, github, as_of, width, number=1):
     per = (3 if len(stats) == 3 else 2) if c.mobile else max(1, min(4, len(stats)))
     compact = c.mobile and per == 3
     column = c.content / per
-    c.hline(c.m, width - c.m, top)
     bodies = []
     for index, (label, value, note) in enumerate(stats):
         row, col = divmod(index, per)
@@ -972,7 +976,13 @@ def about(content, github, as_of, width, number=1):
             tallest = max(tallest, (104 if compact else 110 if c.mobile else 142) + (len(lines) - 1) * (19 if compact else 21 if c.mobile else 24))
         heights.append(tallest + (28 if c.mobile else 36))
     y = top
+    rule = math.ceil(top + sum(heights) + (24 if c.mobile else 32)) - 5
+    if stats:
+        c.hline(c.m, width - c.m, top)
+    c.hline(c.m, width - c.m, rule)
+    points = []
     for row in range(rows):
+        end = rule if row == rows - 1 else y + heights[row]
         for r, col, x, inner, label, value, note in bodies:
             if r != row:
                 continue
@@ -984,18 +994,24 @@ def about(content, github, as_of, width, number=1):
             c.text(x - 2, y + (80 if compact else 82 if c.mobile else 108), 'N/A' if value is None else f'{value:,}', 36 if compact else 46 if c.mobile else 66, INK, 'sans', 500, tracking=-.05)
             c.paragraph(x, y + (104 if compact else 110 if c.mobile else 142), note, inner, 13 if compact else 14 if c.mobile else 15, 19 if compact else 21 if c.mobile else 24, MUTED)
             if col:
-                c.vline(c.m + col * column, y, y + heights[row])
+                c.vline(c.m + col * column, y, end)
+                points += [(c.m + col * column, y), (c.m + col * column, end)]
         if c.mobile and row < rows - 1:
             c.hline(c.m, width - c.m, y + heights[row])
         y += heights[row]
-    height = math.ceil(y + (24 if c.mobile else 32))
+    c.joints(points)
+    height = rule + 5
     alt = 'About. ' + ' '.join(text for text, _ in runs) + ' ' + '; '.join(f'{label}: {value}' for label, value, _ in stats)
     return c.render(height, 'About', alt), alt
 
 
-def section_head(c, index, title, lines, intro, top=None, rule=True):
-    if rule:
-        c.hline(0, c.width, 0)
+def divider(c, number):
+    if number > 2:
+        c.hline(c.m, c.width - c.m, 0)
+
+
+def section_head(c, index, title, lines, intro, top=None):
+    divider(c, index)
     top = (72 if c.mobile else 104) if top is None else top
     c.label(c.m, top, index, title)
     if c.mobile:
@@ -1024,6 +1040,7 @@ def stack(content, width, number=2):
     pad = 16 if c.mobile else 20
     grouped = [rows[i:i + per] for i in range(0, len(rows), per)]
     y = top
+    points = []
     for group_index, group in enumerate(grouped):
         heights = []
         for item in group:
@@ -1035,8 +1052,8 @@ def stack(content, width, number=2):
         for index, item in enumerate(group):
             number = group_index * per + index
             x = c.m + index * column
-            motif = item.get('motif') or MOTIF_ORDER[number % len(MOTIF_ORDER)]
-            c.dots(x + 1, y + 1, column - 2, art - 2, 5 if c.mobile else 6, MOTIFS.get(motif, morph_field)(), .5, .5, 1.0, 4.0)
+            motif = item.get('motif')
+            c.sprite(x + 1, y + 1, column - 2, art - 2, 5 if c.mobile else 6, motif if motif in SPRITES else list(SPRITES)[number % len(SPRITES)])
             c.mono(x + pad, y + 26, f'{number + 1:02d}', MUTED, 11)
             c.hline(x, x + column, y + art)
             count = c.paragraph(x + pad, y + art + 46, item.get('area') or '', column - 2 * pad, 22, 26, INK, 500, -.03)
@@ -1044,7 +1061,10 @@ def stack(content, width, number=2):
             if index:
                 c.vline(x, y, y + row_height)
         c.raw(f'<rect x="{n(c.m + .5)}" y="{n(y + .5)}" width="{n(len(group) * column - 1)}" height="{n(row_height - 1)}" fill="none" stroke="{LINE}"/>')
+        edges = [c.m + index * column for index in range(len(group))] + [c.m + len(group) * column - 1]
+        points += [(x, line) for x in edges for line in (y, y + art, y + row_height - 1)]
         y += row_height - 1
+    c.joints(points)
     height = math.ceil(y + (64 if c.mobile else 96))
     alt = 'Stack. ' + '; '.join(str(item.get('area')) + ': ' + ', '.join(item.get('tools') or []) for item in rows)
     return c.render(height, 'Stack', alt), alt
@@ -1089,7 +1109,7 @@ def activity(content, source, width, number=5):
     c = Svg(width)
     github = source.get('data') or {}
     calendar = github.get('calendar') or []
-    c.hline(0, width, 0)
+    divider(c, number)
     if calendar:
         total = sum(count for _, count in calendar)
         active = sum(count > 0 for _, count in calendar)
@@ -1295,14 +1315,6 @@ def render_profile(config, state, root):
         return filename, alt, valid_url(url), share
 
     contacts = config.get('contacts') or []
-    primary = contact_order(config)[0] if contacts else None
-    if primary:
-        pill = 236
-        rows.append([emit('header', lambda w: header_left(config, w * (DESKTOP - pill) / DESKTOP, w < 800), name, share=percent(DESKTOP - pill)),
-                     emit('header-contact', lambda w: header_right(config, w * pill / DESKTOP, w < 800),
-                          str(config.get('cta') or primary.get('label') or 'Contact'), primary.get('url'), percent(pill))])
-    else:
-        rows.append([emit('header', lambda w: header_left(config, w, w < 800), name)])
     rows.append([emit('hero', lambda w: hero(config, github, as_of, w), name + '. ' + str(config.get('headline') or ''))])
     if contacts:
         specs = hero_buttons(config)

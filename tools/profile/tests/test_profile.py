@@ -216,25 +216,24 @@ class ProfileTests(unittest.TestCase):
             root = Path(tmp)
             self.function('render_profile')(config, {}, root)
             lines = (root / 'README.md').read_text().splitlines()
-            for marker, names, links in (
-                    ('hero-start.svg', ['hero-start'] + ['hero-link-' + str(i) for i in range(1, 5)] + ['hero-end'],
-                     ['https://github.com/owner', 'https://www.linkedin.com/in/owner/', 'mailto:owner@example.com']),
-                    ('header.svg', ['header', 'header-contact'], ['https://github.com/owner'])):
-                row = [line for line in lines if marker in line]
-                self.assertEqual(len(row), 1)
-                row = row[0]
-                self.assertNotRegex(row, r'>\s+<')
-                self.assertEqual(re.findall(r'<a href="([^"]+)">', row), links)
-                shares = [float(value) for value in re.findall(r'width="([\d.]+)%"', row)]
-                self.assertEqual(len(shares), len(names))
-                self.assertLessEqual(sum(shares), 100)
-                self.assertGreater(sum(shares), 99.99)
-                for suffix, total in (('', 1024), ('-mobile', 480)):
-                    roots = [ET.parse(root / 'assets' / (name + suffix + '.svg')).getroot() for name in names]
-                    self.assertEqual(len({svg.get('height') for svg in roots}), 1)
-                    self.assertAlmostEqual(sum(float(svg.get('width')) for svg in roots), total, delta=.05)
-                    for svg, share in zip(roots, shares):
-                        self.assertAlmostEqual(float(svg.get('width')) / total * 100, share, places=2)
+            self.assertIn('assets/hero.svg', lines[2])
+            names = ['hero-start'] + ['hero-link-' + str(i) for i in range(1, 5)] + ['hero-end']
+            links = ['https://github.com/owner', 'https://www.linkedin.com/in/owner/', 'mailto:owner@example.com']
+            row = [line for line in lines if 'hero-start.svg' in line]
+            self.assertEqual(len(row), 1)
+            row = row[0]
+            self.assertNotRegex(row, r'>\s+<')
+            self.assertEqual(re.findall(r'<a href="([^"]+)">', row), links)
+            shares = [float(value) for value in re.findall(r'width="([\d.]+)%"', row)]
+            self.assertEqual(len(shares), len(names))
+            self.assertLessEqual(sum(shares), 100)
+            self.assertGreater(sum(shares), 99.99)
+            for suffix, total in (('', 1024), ('-mobile', 480)):
+                roots = [ET.parse(root / 'assets' / (name + suffix + '.svg')).getroot() for name in names]
+                self.assertEqual(len({svg.get('height') for svg in roots}), 1)
+                self.assertAlmostEqual(sum(float(svg.get('width')) for svg in roots), total, delta=.05)
+                for svg, share in zip(roots, shares):
+                    self.assertAlmostEqual(float(svg.get('width')) / total * 100, share, places=2)
 
     def test_each_svg_embeds_only_the_fonts_it_uses(self):
         config = {'name': 'Valdeir Júnior', 'contacts': [{'label': 'GitHub', 'url': 'https://github.com/owner'}]}
@@ -259,6 +258,80 @@ class ProfileTests(unittest.TestCase):
             self.assertIn('(02)', text('activity.svg'))
             self.assertIn('(03)', text('contact.svg'))
             self.assertFalse((Path(tmp) / 'assets/stack.svg').exists())
+
+    def test_hero_code_animation_rests_on_its_first_frame_and_loops_back_to_it(self):
+        import re
+        with tempfile.TemporaryDirectory() as tmp:
+            self.function('render_profile')({'name': 'Test', 'contacts': []}, {}, Path(tmp))
+            for name in ('hero.svg', 'hero-mobile.svg'):
+                svg = (Path(tmp) / 'assets' / name).read_text()
+                self.assertIn('@media(prefers-reduced-motion:reduce){*{animation:none!important}}', svg)
+                frames = {key: re.findall(r'([\d.,%]+)\{([^{}]*)\}', body)
+                          for key, body in re.findall(r'@keyframes (\w+)\{((?:[^{}]*\{[^{}]*\})*)\}', svg)}
+                covers = re.findall(r'<g class="ty(\d+)"><rect x="[^"]+" y="([^"]+)" width="([^"]+)"', svg)
+                self.assertGreater(len(covers), 2)
+                (first, top, _), (last, bottom, _) = covers[0], covers[-1]
+                pitch = (float(bottom) - float(top)) / (int(last) - int(first))
+                scroll = frames['tys']
+                self.assertEqual(scroll[0], ('0%', 'transform:translateY(0)'))
+                self.assertEqual(scroll[-1][0], '100%')
+                self.assertAlmostEqual(float(re.search(r'translateY\((-?[\d.]+)px\)', scroll[-1][1]).group(1)),
+                                       -len(self.function('CODE').splitlines()) * pitch)
+                for index, _, width in covers:
+                    cover = frames['ty' + index]
+                    self.assertTrue(cover[0][0].startswith('0%,'))
+                    self.assertIn('translateX(0)', cover[0][1])
+                    self.assertTrue(cover[-1][0].endswith(',100%'))
+                    self.assertIn(f'translateX({width}px)', cover[-1][1])
+                rest = re.search(r'\.tyc\{transform:(translateX\([^)]*\))', svg).group(1)
+                cursor = frames['tyc']
+                self.assertIn(rest, cursor[0][1])
+                self.assertIn(rest, cursor[-1][1])
+
+    def test_stack_icons_follow_their_motif_and_show_whole_without_motion(self):
+        import re
+        sprites, stack = self.function('SPRITES'), self.function('stack')
+        for name, (rows, groups) in sprites.items():
+            self.assertEqual(len({len(row) for row in rows}), 1, name)
+            self.assertLessEqual(set(''.join(rows)) - set('.123456'), set(groups), name)
+        card = lambda motif: stack({'stack': [{'area': 'Tools', 'motif': motif, 'tools': ['Git']}]}, 1024)[0]
+        self.assertEqual(card('unknown'), card(next(iter(sprites))))
+        self.assertNotEqual(card('branch'), card('code'))
+        for width in (1024, 480):
+            svg = stack({'stack': [{'area': name, 'motif': name, 'tools': []} for name in sprites]}, width)[0]
+            self.assertIn('@media(prefers-reduced-motion:reduce){*{animation:none!important}}', svg)
+            groups = re.findall(r'<g class="(s\d+)"([^>]*)>', svg)
+            self.assertTrue(groups)
+            for cls, extra in groups:
+                self.assertEqual(extra, '')
+                kind = re.search(r'\.' + cls + r'\{animation:(\w+) ', svg).group(1)
+                self.assertIn('@keyframes ' + kind + '{', svg)
+
+    def test_rules_stay_inside_the_margins_and_stat_dividers_meet_them_at_joints(self):
+        import re
+        n = self.function('n')
+        config = {'name': 'Test', 'stats': ['years', 'contributions_all', 'streak_longest', 'followers'],
+                  'stack': [{'area': 'Tools', 'tools': ['Git']}], 'contacts': [{'label': 'GitHub', 'url': 'https://github.com/owner'}]}
+        with tempfile.TemporaryDirectory() as tmp:
+            self.function('render_profile')(config, {}, Path(tmp))
+            for path in (Path(tmp) / 'assets').glob('*.svg'):
+                width = float(ET.parse(path).getroot().get('width'))
+                margin = 20 if width == 480 else 40
+                for x1, x2 in re.findall(r'<path d="M([\d.]+) [\d.]+H([\d.]+)" stroke', path.read_text()):
+                    self.assertGreaterEqual(float(x1), margin, path.name)
+                    self.assertLessEqual(float(x2), width - margin, path.name)
+        for width in (1024, 480):
+            svg = self.function('about')(config, {}, '2026-10-07', width)[0]
+            rules = re.findall(r'<path d="M([\d.]+) ([\d.]+)H([\d.]+)"', svg)
+            verticals = re.findall(r'<path d="M([\d.]+) ([\d.]+)V([\d.]+)"', svg)
+            joints = set(re.findall(r'<rect x="(-?[\d.]+)" y="(-?[\d.]+)" width="5" height="5"', svg))
+            self.assertEqual(len({(x1, x2) for x1, _, x2 in rules}), 1)
+            heights = {float(y) - .5 for _, y, _ in rules}
+            self.assertTrue(verticals)
+            for x, y1, y2 in verticals:
+                for y in (float(y1), float(y2)):
+                    self.assertIn(y, heights)
+                    self.assertIn((n(float(x) - 2.5), n(y - 2)), joints)
 
     def test_http_transport_encodes_graphql_json_and_decodes_response(self):
         from http.server import BaseHTTPRequestHandler, HTTPServer

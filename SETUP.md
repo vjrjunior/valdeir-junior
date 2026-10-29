@@ -12,18 +12,16 @@ No third-party Python packages are required.
 
 Edit `profile.json`. All personal content lives in this file.
 
-- `name`: the first word is the first line of the hero, the rest is the second line, followed by a period. The top bar shows it in lowercase.
+- `name`: the first word is the first line of the hero, the rest is the second line, followed by a period.
 - `github_username`: your GitHub login. When this is `null`, Actions uses the repository owner's login automatically. Local rendering with no login shows an empty Activity panel.
 - `wordmark`: the lowercase word drawn in dots in the footer. Supported letters: a c d e i j l n o r u v.
 - `role`: the first line of the small caption at the top of the hero.
 - `headline`: the paragraph next to your name.
-- `cta`: the label of the top-right button. It and the filled hero button link to the contact marked `"primary": true`.
-- `nav`: the labels in the top bar. They are decoration; images in a README cannot link to sections.
 - `about`, `about_more`: the About statement. The second part is shown dimmed.
 - `stats`: the numbers under About, in order. Choose from `years`, `contributions_all`, `contributions_window`, `active_days`, `streak_longest`, `repo_count`, `followers`. All values come from the synced GitHub data.
-- `stack_title` (a list of lines), `stack_intro`, `stack`: the Stack section. Each entry has `area`, `tools` and an optional `motif` for its dot art: `morph`, `stream`, `ripple`, `globe` or `silk`. Desktop shows up to five cards per row, mobile two.
+- `stack_title` (a list of lines), `stack_intro`, `stack`: the Stack section. Each entry has `area`, `tools` and an optional `motif`, the dot icon on its card: `code`, `browser`, `database`, `server` or `branch`. Cards without a known `motif` take the icons in that order. Desktop shows up to five cards per row, mobile two.
 - `now_title`, `now_intro`, `now_items`: the Now timeline. Each item has `tag`, `title` and `text`. Leave `now_items` empty to drop the section.
-- `contact_title`, `contact_intro`, `contacts`: the Contact section. Each contact has `label`, optional `detail`, `url` (`https://…` or `mailto:…`), optional `primary` and optional `cta` for the hero button label. GitHub, LinkedIn and email get their own icon, anything else a generic one. A null URL renders a dimmed entry without a link.
+- `contact_title`, `contact_intro`, `contacts`: the Contact section. Each contact has `label`, optional `detail`, `url` (`https://…` or `mailto:…`), optional `primary` and optional `cta`. The contact marked `"primary": true` is the first, filled hero button, labelled with its `cta`; the others follow with their `label`. GitHub, LinkedIn and email get their own icon, anything else a generic one. A null URL renders a dimmed entry without a link.
 - `dev.enabled`: false by default. Set your real `dev.username` before enabling. `show_writing` controls the optional Writing section before Activity.
 
 Sections are numbered in the order they appear; optional sections that are empty are skipped.
@@ -72,11 +70,11 @@ Activity draws a rolling window of exactly 365 days, including its stated end da
 
 ## Appearance
 
-Every section is an SVG with the GitHub dark background (`#0d1117`), so the profile blends into GitHub's dark theme; on the light theme it reads as a dark panel. Type is Host Grotesk for text and DM Mono for labels. The violet dot art (hero ribbon, stack motifs, activity calendar, footer wordmark) is computed by the generator from seeded noise and drawn as plain squares, so the output is deterministic. Desktop assets are 1024 px wide; mobile assets are 480 px wide with stacked layouts and icon-only hero buttons. The README selects them with `<picture>` and a viewport media query.
+Every section is an SVG with the GitHub dark background (`#0d1117`), so the profile blends into GitHub's dark theme; on the light theme it reads as a dark panel. Type is Host Grotesk for text and DM Mono for labels. The violet dot art (the code behind the hero, the stack icons, the activity calendar and the footer wordmark) is computed by the generator and drawn as plain squares, so the output is deterministic. Rules stop at the side margins, and a small square marks each point where two rules meet. Desktop assets are 1024 px wide; mobile assets are 480 px wide with stacked layouts and icon-only hero buttons. The README selects them with `<picture>` and a viewport media query.
 
-An image in a README can carry only one link, so each clickable target is its own image: every contact row, and slices of the top bar and the hero button row placed side by side with percentage widths. The slices of a row must stay on one line of the README with no whitespace between them. Where two slices meet, a browser can leave a faint hairline on the light theme.
+An image in a README can carry only one link, so each clickable target is its own image: every contact row, and slices of the hero button row placed side by side with percentage widths. The slices of a row must stay on one line of the README with no whitespace between them. Where two slices meet, a browser can leave a faint hairline on the light theme.
 
-Each SVG embeds only the font weights it uses; the fonts are not subset. CSS provides a slow shimmer on the brightest dots and a pulse on status squares, and respects reduced-motion preferences.
+Each SVG embeds only the font weights it uses; the fonts are not subset. CSS animates the hero, where code types itself line by line and scrolls in a seamless loop, and the stack icons: a blinking cursor, a loading shimmer, disk and server lights, and commits lighting up in order. It also adds a slow shimmer to the brightest wordmark dots and a pulse on status squares. With reduced motion, every animation rests on a complete still frame.
 
 The README itself needs no custom CSS, JavaScript, remote image generator or external font service. Mobile switching depends on the browser's image rendering support. `preview.html` is a local visual preview at the width of a GitHub README; it is not needed for the profile.
 
