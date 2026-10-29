@@ -6,6 +6,7 @@ Verified on 2026-10-29, after the top bar was removed and the hero code animatio
 - All 30 delivered SVGs parse as XML, have accessible titles and descriptions and a reduced-motion rule. All README image paths exist.
 - Desktop (1024 px) and 480 px mobile assets were inspected in headless Chromium, including the animation frames and the loop point of the hero.
 - The pushed revision was rendered by github.com at 1280 px and 390 px: all 15 images loaded, rows had no gaps, the mobile assets were selected at 390 px, the hero code and the stack icons animated inside their images, and every link pointed to its contact.
+- After the repository was renamed to `vjrjunior`, github.com/vjrjunior showed the README on the profile page at 1280 px and 390 px: all 15 images loaded, rows had no gaps and the mobile assets were selected at 390 px. A manual run of the workflow in the renamed repository passed.
 - The scheduled workflow has collected live GitHub data and committed it daily since 2026-10-05. The run triggered by this revision passed and regenerated the hero and stack assets without changes.
 
-Not verified: a live DEV collection, the optional Writing section in this revision, the light-theme hairline between hero button slices, and the README on the profile page itself, which reads from the repository named after the account.
+Not verified: a live DEV collection, the optional Writing section in this revision and the light-theme hairline between hero button slices.
