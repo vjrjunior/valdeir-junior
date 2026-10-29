@@ -15,9 +15,9 @@
       "repo_stars": {
         "vjrjunior/bfriend-framework": 0,
         "vjrjunior/orbita-vite-wp-boilerplate": 0,
-        "vjrjunior/valdeir-junior": 0,
         "vjrjunior/vjr-wp-nuxt": 0,
-        "vjrjunior/vjrjunior": 0
+        "vjrjunior/vjrjunior": 0,
+        "vjrjunior/vjrjunior-old": 0
       },
       "languages": {
         "SCSS": 355985,
@@ -31,10 +31,10 @@
         "Hack": 62
       },
       "year": 2026,
-      "contributions_year": 1053,
-      "contributions_all": 2723,
-      "commits_year": 7,
-      "commits_all": 61,
+      "contributions_year": 1054,
+      "contributions_all": 2724,
+      "commits_year": 8,
+      "commits_all": 62,
       "streak_current": 11,
       "streak_longest": 19,
       "calendar": [
@@ -1496,7 +1496,7 @@
         ],
         [
           "2026-10-29",
-          2
+          3
         ]
       ],
       "repository_scope": "public owned non-fork repositories",
